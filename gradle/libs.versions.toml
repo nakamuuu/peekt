@@ -1,0 +1,10 @@
+[versions]
+agp = "9.1.1"
+ksp = "2.3.6"
+compileSdk = "37"
+minSdk = "28"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
