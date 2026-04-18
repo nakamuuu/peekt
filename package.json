@@ -1,0 +1,10 @@
+{
+  "name": "peekt",
+  "private": true,
+  "scripts": {
+    "rulesync:generate": "rulesync generate --targets cursor,claudecode --features rules"
+  },
+  "devDependencies": {
+    "rulesync": "^8.0.0"
+  }
+}
