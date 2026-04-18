@@ -21,4 +21,5 @@ include(
     ":data-store",
     ":library",
     ":library-no-op",
+    ":sample",
 )
