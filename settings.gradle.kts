@@ -16,3 +16,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "peekt"
 
+include(
+    ":data-store",
+)
