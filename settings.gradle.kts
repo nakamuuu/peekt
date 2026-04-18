@@ -19,5 +19,6 @@ rootProject.name = "peekt"
 include(
     ":core",
     ":data-store",
+    ":library",
     ":library-no-op",
 )
