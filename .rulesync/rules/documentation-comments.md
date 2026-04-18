@@ -9,6 +9,11 @@ globs: ["*.kt"]
 
 Conventions for `/** ... */`: document **what callers need**, not implementation trivia or name restatement.
 
+## Language and test sources
+
+- Write all KDoc and other documentation comments in English.
+- In test code (for example under `src/test`, `androidTest`, or `*Test.kt` files), KDoc is not required.
+
 ## Block shape
 
 - Always **multi-line** KDoc. Do not leave single-line `/** ... */`; convert existing single-line to multi-line.
