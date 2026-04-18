@@ -23,3 +23,4 @@ node_modules/
 # AI development tools
 CLAUDE.md
 .cursor/
+.claude/
