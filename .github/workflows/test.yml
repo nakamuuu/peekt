@@ -20,7 +20,15 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: tools platform-tools platforms;android-37
+          # API 37 is published as platforms;android-37.0 (not platforms;android-37).
+          packages: tools platform-tools platforms;android-37.0
+      - name: Link platforms/android-37 to android-37.0
+        run: |
+          root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          platforms="${root:?}/platforms"
+          if [ -d "$platforms/android-37.0" ] && [ ! -e "$platforms/android-37" ]; then
+            ln -s android-37.0 "$platforms/android-37"
+          fi
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
       - name: Run library unit tests
