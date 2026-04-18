@@ -1,0 +1,22 @@
+# Android Studio
+.idea/
+.navigation/
+build/
+*/build/
+*.iml
+
+# Built APK files
+*.apk
+*.ap_
+
+# Gradle
+.gradle/
+gradle.properties
+local.properties
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store
+
