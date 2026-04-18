@@ -1,14 +1,12 @@
 # Peekt
 
-Peekt provides in-app inspection of HTTP(S) requests and responses using an OkHttp interceptor.
-
-HTTP transactions are recorded to a local database; you observe and display them from your own UI.
+Peekt records HTTP(S) request/response round-trips from OkHttp into a local database (Room) for in-app inspection.
 
 ## Features
 
 - 💾 Records each OkHttp request/response round-trip locally (Room).
 - 🌊 Observe recorded transactions with Kotlin `Flow`.
-- 🔀 Use the full artifact in debug builds and the no-op in release builds for the same API without recording overhead.
+- 🔀 Use the recording library in debug builds and the no-op artifact in release—the same public API with no recording overhead in production.
 - 🎨 No built-in inspector UI—you build your own screens.
 - 🪶 No AppCompat / Jetpack Compose or other UI-framework dependencies.
 
@@ -26,6 +24,8 @@ allprojects {
     }
 }
 ```
+
+If your project declares repositories only in `settings.gradle`, add JitPack there instead of (or as well as) the example above.
 
 With Kotlin DSL (`settings.gradle.kts`), add the JitPack repository inside your `dependencyResolutionManagement { repositories { ... } }` block:
 
@@ -49,9 +49,7 @@ dependencies {
 }
 ```
 
-Replace `VERSION` with a [JitPack](https://jitpack.io/#nakamuuu/peekt) version: typically a Git tag, a commit hash, or a `-SNAPSHOT` revision—see JitPack’s docs for your hosting setup.
-
-## How to use
+## Installation
 
 1. **Create `Peekt` once** (for example in `Application` or your DI graph), using the same `Context` you use for other app-wide singletons:
 
@@ -92,7 +90,7 @@ See KDoc on `Peekt`, `PeektRecorder`, and `PeektConfig` for full API details.
 
 Pass a `PeektConfig` to `Peekt.create`; omit it to use defaults.
 
-## How to develop
+## Building
 
 1. Clone this repository.
 
@@ -101,22 +99,24 @@ Pass a `PeektConfig` to `Peekt.create`; omit it to use defaults.
    cd peekt
    ```
 
-2. Install npm dependencies, then generate editor rules for AI development tools with [rulesync](https://github.com/dyoshikawa/rulesync). Run the script again whenever anyone change the rule sources.
-
-   ```bash
-   npm install
-   npm run rulesync:generate
-   ```
-
-3. Build and test with Gradle. You need a JDK and the Android SDK.
+2. Build and test with Gradle. You need a JDK and the Android SDK.
 
    ```bash
    ./gradlew build
    ```
 
+### Optional: AI editor rules (contributors)
+
+Install npm dependencies, then generate editor rules for AI development tools with [rulesync](https://github.com/dyoshikawa/rulesync). Run the script again whenever the rule sources change.
+
+```bash
+npm install
+npm run rulesync:generate
+```
+
 ## Requirements
 
-Android 9+ (API Level: 28+)
+Android 9 (API 28) or higher
 
 ## License
 
