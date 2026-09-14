@@ -26,7 +26,8 @@ abstract class PeektDatabase : RoomDatabase() {
          */
         fun create(context: Context): PeektDatabase {
             return Room.databaseBuilder(context.applicationContext, PeektDatabase::class.java, NAME)
-                .fallbackToDestructiveMigration(false)
+                .fallbackToDestructiveMigration(true)
+                .fallbackToDestructiveMigrationOnDowngrade(true)
                 .build()
         }
 
@@ -40,7 +41,8 @@ abstract class PeektDatabase : RoomDatabase() {
                 context.applicationContext,
                 PeektDatabase::class.java
             )
-                .fallbackToDestructiveMigration(false)
+                .fallbackToDestructiveMigration(true)
+                .fallbackToDestructiveMigrationOnDowngrade(true)
                 .build()
         }
     }
