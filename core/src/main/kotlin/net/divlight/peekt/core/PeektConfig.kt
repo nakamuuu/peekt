@@ -3,6 +3,8 @@ package net.divlight.peekt.core
 /**
  * Configuration for the OkHttp interceptor that records traffic into Peekt.
  *
+ * @property maxTransactions Maximum number of stored transactions to keep after each insert, newest first.
+ *   `null` disables this cap.
  * @property includedHosts Hosts to record (compared case-insensitively). A request is recorded when its host
  *   equals an entry or is a subdomain of one. A leading `.` on an entry is ignored. Empty records every host.
  * @property maxContentLength Maximum number of bytes to retain per request body, and maximum bytes
@@ -11,6 +13,7 @@ package net.divlight.peekt.core
  *   before persistence.
  */
 data class PeektConfig(
+    val maxTransactions: Int? = 100,
     val includedHosts: Set<String> = emptySet(),
     val maxContentLength: Long = 500_000L,
     val redactHeaderNames: Set<String> = emptySet(),
