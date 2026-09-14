@@ -1,6 +1,11 @@
 package net.divlight.peekt
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import net.divlight.peekt.core.ClearingStrategy
 import net.divlight.peekt.datastore.PeektDatabase
 import net.divlight.peekt.core.PeektConfig
 import net.divlight.peekt.core.PeektRecorder
@@ -22,6 +27,8 @@ class Peekt private constructor(
     fun interceptor(): Interceptor = okhttpInterceptor
 
     companion object {
+        private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
         /**
          * Creates a [Peekt] with a default [PeektConfig], backed by the app-private Room database.
          *
@@ -30,6 +37,10 @@ class Peekt private constructor(
          */
         fun create(context: Context, config: PeektConfig = PeektConfig()): Peekt {
             val dao = PeektDatabase.create(context).httpTransactionDao()
+            when (config.clearingStrategy) {
+                ClearingStrategy.OnLaunch -> ioScope.launch { dao.deleteAll() }
+                ClearingStrategy.Never -> Unit
+            }
             val recorder = RealPeektRecorder(dao)
             val interceptor = PeektInterceptor(dao, config)
             return Peekt(recorder, interceptor)
