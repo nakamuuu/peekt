@@ -1,4 +1,4 @@
-package net.divlight.peekt
+package net.divlight.peekt.http
 
 /**
  * Decides whether a request host should be recorded, based on [includedHosts].

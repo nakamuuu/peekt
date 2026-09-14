@@ -1,9 +1,10 @@
-package net.divlight.peekt
+package net.divlight.peekt.recorder
 
-import net.divlight.peekt.datastore.HttpTransactionEntity
 import net.divlight.peekt.core.HttpTransaction
 import net.divlight.peekt.core.HttpTransactionId
 import net.divlight.peekt.core.HttpTransactionMessage
+import net.divlight.peekt.datastore.HttpTransactionEntity
+import net.divlight.peekt.http.HeadersTextCodec
 
 /**
  * Maps [HttpTransactionEntity] rows to core API types, including header text decoding.

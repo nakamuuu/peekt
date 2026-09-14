@@ -1,4 +1,4 @@
-package net.divlight.peekt
+package net.divlight.peekt.http
 
 import okhttp3.Headers
 

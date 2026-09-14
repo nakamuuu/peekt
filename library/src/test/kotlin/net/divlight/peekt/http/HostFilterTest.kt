@@ -1,4 +1,4 @@
-package net.divlight.peekt
+package net.divlight.peekt.http
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test

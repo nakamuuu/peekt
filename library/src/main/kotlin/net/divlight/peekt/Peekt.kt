@@ -6,9 +6,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import net.divlight.peekt.core.ClearingStrategy
-import net.divlight.peekt.datastore.PeektDatabase
 import net.divlight.peekt.core.PeektConfig
 import net.divlight.peekt.core.PeektRecorder
+import net.divlight.peekt.datastore.PeektDatabase
+import net.divlight.peekt.interceptor.PeektInterceptor
+import net.divlight.peekt.recorder.RealPeektRecorder
 import okhttp3.Interceptor
 
 /**

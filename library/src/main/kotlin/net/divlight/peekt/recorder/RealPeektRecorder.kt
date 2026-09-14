@@ -1,12 +1,12 @@
-package net.divlight.peekt
+package net.divlight.peekt.recorder
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import net.divlight.peekt.datastore.HttpTransactionDao
 import net.divlight.peekt.core.HttpTransaction
 import net.divlight.peekt.core.HttpTransactionId
 import net.divlight.peekt.core.HttpTransactionMessage
 import net.divlight.peekt.core.PeektRecorder
+import net.divlight.peekt.datastore.HttpTransactionDao
 
 /**
  * [PeektRecorder] implementation backed by [HttpTransactionDao].

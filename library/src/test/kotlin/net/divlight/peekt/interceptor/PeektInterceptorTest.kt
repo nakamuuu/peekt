@@ -1,4 +1,4 @@
-package net.divlight.peekt
+package net.divlight.peekt.interceptor
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
