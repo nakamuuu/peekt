@@ -10,8 +10,10 @@ import net.divlight.peekt.core.PeektConfig
 import net.divlight.peekt.datastore.HttpTransactionDao
 import net.divlight.peekt.datastore.HttpTransactionEntity
 import net.divlight.peekt.datastore.PeektDatabase
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -107,6 +109,28 @@ class PeektInterceptorTest {
         }
         val rows = runBlocking { dao.observeAll().first() }
         assertThat(rows).isEmpty()
+    }
+
+    @Test
+    fun intercept_recordsPostBodyAndForwardsIt() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        val payload = """{"title":"foo"}"""
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts"))
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            assertThat(response.code).isEqualTo(200)
+        }
+        assertThat(server.takeRequest().body.readUtf8()).isEqualTo(payload)
+        val row = runBlocking { dao.observeAll().first() }.single()
+        assertThat(row.requestBody).isEqualTo(payload)
     }
 
     @Test
