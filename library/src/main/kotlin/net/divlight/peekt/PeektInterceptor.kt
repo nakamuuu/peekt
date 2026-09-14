@@ -23,9 +23,15 @@ internal class PeektInterceptor(
     private val dao: HttpTransactionDao,
     private val config: PeektConfig,
 ) : Interceptor {
+    private val hostFilter = HostFilter(config.includedHosts)
+
     override fun intercept(chain: Interceptor.Chain): Response {
-        val startedAt = System.currentTimeMillis()
         var request = chain.request()
+        if (!hostFilter.shouldRecord(request.url.host)) {
+            return chain.proceed(request)
+        }
+
+        val startedAt = System.currentTimeMillis()
         val redactedRequestHeaders = HeaderRedactor.redact(request.headers, config.redactHeaderNames)
         var requestBodyText: String? = null
         val body = request.body

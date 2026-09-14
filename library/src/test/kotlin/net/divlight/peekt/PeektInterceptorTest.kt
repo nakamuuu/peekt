@@ -61,4 +61,48 @@ class PeektInterceptorTest {
         assertThat(row.responseBody).contains("id")
         assertThat(row.tookMs).isNotNull()
     }
+
+    @Test
+    fun intercept_recordsWhenHostIsIncluded() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val host = server.url("/").host
+        val interceptor = PeektInterceptor(dao, PeektConfig(includedHosts = setOf(host)))
+        server.enqueue(MockResponse().setBody("""{"id":1}"""))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts/1"))
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            assertThat(response.code).isEqualTo(200)
+        }
+        val rows = runBlocking { dao.observeAll().first() }
+        assertThat(rows).hasSize(1)
+    }
+
+    @Test
+    fun intercept_skipsWhenHostIsNotIncluded() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(
+            dao,
+            PeektConfig(includedHosts = setOf("example.com")),
+        )
+        server.enqueue(MockResponse().setBody("""{"id":1}"""))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts/1"))
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            assertThat(response.code).isEqualTo(200)
+        }
+        val rows = runBlocking { dao.observeAll().first() }
+        assertThat(rows).isEmpty()
+    }
 }
