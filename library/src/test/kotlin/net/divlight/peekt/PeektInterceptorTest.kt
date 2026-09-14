@@ -68,6 +68,46 @@ class PeektInterceptorTest {
     }
 
     @Test
+    fun intercept_trimsToMaxTransactions() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig(maxTransactions = 2))
+        repeat(3) { index ->
+            server.enqueue(MockResponse().setBody("ok"))
+            val client = OkHttpClient.Builder()
+                .addInterceptor(interceptor)
+                .build()
+            val request = Request.Builder()
+                .url(server.url("/posts/${index + 1}"))
+                .get()
+                .build()
+            client.newCall(request).execute().close()
+        }
+        val rows = runBlocking { dao.observeAll().first() }
+        assertThat(rows).hasSize(2)
+        assertThat(rows.map { it.url }).containsExactly(
+            server.url("/posts/2").toString(),
+            server.url("/posts/3").toString(),
+        )
+    }
+
+    @Test
+    fun intercept_skipsTrimWhenMaxTransactionsIsNull() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig(maxTransactions = null))
+        repeat(3) {
+            server.enqueue(MockResponse().setBody("ok"))
+            val client = OkHttpClient.Builder()
+                .addInterceptor(interceptor)
+                .build()
+            client.newCall(Request.Builder().url(server.url("/posts")).get().build()).execute().close()
+        }
+        val rows = runBlocking { dao.observeAll().first() }
+        assertThat(rows).hasSize(3)
+    }
+
+    @Test
     fun intercept_recordsWhenHostIsIncluded() {
         val db = PeektDatabase.createInMemory(context)
         val dao = db.httpTransactionDao()
@@ -227,4 +267,6 @@ private class FailingHttpTransactionDao(
     override suspend fun getById(id: Long): HttpTransactionEntity? = delegate.getById(id)
 
     override suspend fun deleteAll() = delegate.deleteAll()
+
+    override suspend fun deleteAllExceptLatest(keep: Int) = delegate.deleteAllExceptLatest(keep)
 }

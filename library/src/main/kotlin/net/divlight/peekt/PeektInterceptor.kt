@@ -46,7 +46,14 @@ internal class PeektInterceptor(
             tookMs = null,
             error = null,
         )
-        val id = persist { dao.insert(pending) }
+        val id = persist {
+            val insertedId = dao.insert(pending)
+            val maxTransactions = config.maxTransactions
+            if (maxTransactions != null) {
+                dao.deleteAllExceptLatest(maxTransactions)
+            }
+            insertedId
+        }
         return try {
             val response = chain.proceed(request)
             if (id != null) {

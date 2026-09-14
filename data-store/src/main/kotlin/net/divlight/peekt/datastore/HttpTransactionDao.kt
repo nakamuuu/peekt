@@ -43,4 +43,19 @@ interface HttpTransactionDao {
      */
     @Query("DELETE FROM http_transactions")
     suspend fun deleteAll()
+
+    /**
+     * Deletes all rows except the [keep] newest, by [HttpTransactionEntity.startedAtMillis] then id.
+     */
+    @Query(
+        """
+        DELETE FROM http_transactions
+        WHERE id NOT IN (
+            SELECT id FROM http_transactions
+            ORDER BY started_at_millis DESC, id DESC
+            LIMIT :keep
+        )
+        """,
+    )
+    suspend fun deleteAllExceptLatest(keep: Int)
 }
