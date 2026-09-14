@@ -3,10 +3,13 @@ package net.divlight.peekt
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import net.divlight.peekt.datastore.PeektDatabase
+import kotlinx.coroutines.runBlocking
 import net.divlight.peekt.core.PeektConfig
+import net.divlight.peekt.datastore.HttpTransactionDao
+import net.divlight.peekt.datastore.HttpTransactionEntity
+import net.divlight.peekt.datastore.PeektDatabase
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
@@ -105,4 +108,99 @@ class PeektInterceptorTest {
         val rows = runBlocking { dao.observeAll().first() }
         assertThat(rows).isEmpty()
     }
+
+    @Test
+    fun intercept_proceedsWhenInsertFails() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = FailingHttpTransactionDao(
+            delegate = db.httpTransactionDao(),
+            insertException = RuntimeException("insert failed"),
+        )
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        server.enqueue(MockResponse().setBody("""{"id":1}"""))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts/1"))
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            assertThat(response.code).isEqualTo(200)
+        }
+        assertThat(server.takeRequest().path).isEqualTo("/posts/1")
+        val rows = runBlocking { dao.observeAll().first() }
+        assertThat(rows).isEmpty()
+    }
+
+    @Test
+    fun intercept_returnsResponseWhenUpdateFails() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = FailingHttpTransactionDao(
+            delegate = db.httpTransactionDao(),
+            updateException = RuntimeException("update failed"),
+        )
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        server.enqueue(MockResponse().setBody("""{"id":1}"""))
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts/1"))
+            .get()
+            .build()
+        client.newCall(request).execute().use { response ->
+            assertThat(response.code).isEqualTo(200)
+        }
+        val rows = runBlocking { dao.observeAll().first() }
+        assertThat(rows).hasSize(1)
+        assertThat(rows.single().statusCode).isNull()
+    }
+
+    @Test
+    fun intercept_rethrowsNetworkErrorWhenFailureUpdateFails() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = FailingHttpTransactionDao(
+            delegate = db.httpTransactionDao(),
+            updateException = RuntimeException("update failed"),
+        )
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts/1"))
+            .get()
+            .build()
+        server.shutdown()
+        try {
+            client.newCall(request).execute()
+            throw AssertionError("expected a network failure")
+        } catch (e: Exception) {
+            assertThat(e).isNotInstanceOf(RuntimeException::class.java)
+            assertThat(e.message).isNotEqualTo("update failed")
+        }
+    }
+}
+
+private class FailingHttpTransactionDao(
+    private val delegate: HttpTransactionDao,
+    private val insertException: Exception? = null,
+    private val updateException: Exception? = null,
+) : HttpTransactionDao {
+    override suspend fun insert(entity: HttpTransactionEntity): Long {
+        insertException?.let { throw it }
+        return delegate.insert(entity)
+    }
+
+    override suspend fun update(entity: HttpTransactionEntity) {
+        updateException?.let { throw it }
+        delegate.update(entity)
+    }
+
+    override fun observeAll(): Flow<List<HttpTransactionEntity>> = delegate.observeAll()
+
+    override suspend fun getById(id: Long): HttpTransactionEntity? = delegate.getById(id)
+
+    override suspend fun deleteAll() = delegate.deleteAll()
 }
