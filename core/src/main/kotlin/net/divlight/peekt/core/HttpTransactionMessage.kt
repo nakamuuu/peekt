@@ -1,15 +1,15 @@
 package net.divlight.peekt.core
 
 /**
- * [HttpTransaction] plus decoded headers and optional body text for inspection UIs.
+ * [HttpTransaction] plus decoded headers and optional bodies for inspection UIs.
  *
- * @property requestBody Captured request body text, truncated per [PeektConfig.maxContentLength] when applicable.
- * @property responseBody Captured response body text, truncated per [PeektConfig.maxContentLength] when applicable.
+ * @property requestBody Captured request body, or `null` when the request had no body.
+ * @property responseBody Captured response body, or `null` when the exchange failed before a response.
  */
 data class HttpTransactionMessage(
     val transaction: HttpTransaction,
     val requestHeaders: List<HttpHeader>,
     val responseHeaders: List<HttpHeader>,
-    val requestBody: String?,
-    val responseBody: String?,
+    val requestBody: HttpBody?,
+    val responseBody: HttpBody?,
 )

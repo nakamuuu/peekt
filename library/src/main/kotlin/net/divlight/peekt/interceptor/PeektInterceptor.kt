@@ -3,23 +3,27 @@ package net.divlight.peekt.interceptor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import net.divlight.peekt.core.HttpBody
 import net.divlight.peekt.core.PeektConfig
 import net.divlight.peekt.datastore.HttpTransactionDao
 import net.divlight.peekt.datastore.HttpTransactionEntity
 import net.divlight.peekt.http.HeaderRedactor
 import net.divlight.peekt.http.HeadersTextCodec
 import net.divlight.peekt.http.HostFilter
+import net.divlight.peekt.http.HttpBodyCodec
 import net.divlight.peekt.http.RequestBodySampler
+import net.divlight.peekt.http.ResponseBodySampler
 import okhttp3.Interceptor
+import okhttp3.Request
 import okhttp3.Response
 
 /**
  * OkHttp [Interceptor] that persists one row per request: insert before the network call, update on success or failure.
  *
- * Request bodies are peeked up to [PeektConfig.maxContentLength] without retaining the full payload; the original
- * body is forwarded to the chain. Response bodies are read via [Response.peekBody] up to the same limit. Database
- * work runs on [Dispatchers.IO] inside [runBlocking] because OkHttp interceptors are synchronous. Persistence
- * failures are swallowed so they never replace the chain result or the original network exception.
+ * Request and response bodies are classified as [HttpBody] up to [PeektConfig.maxContentLength]. The original
+ * request body is forwarded to the chain. Database work runs on [Dispatchers.IO] inside [runBlocking] because
+ * OkHttp interceptors are synchronous. Persistence failures are swallowed so they never replace the chain result
+ * or the original network exception.
  */
 internal class PeektInterceptor(
     private val dao: HttpTransactionDao,
@@ -35,16 +39,17 @@ internal class PeektInterceptor(
 
         val startedAt = System.currentTimeMillis()
         val redactedRequestHeaders = HeaderRedactor.redact(request.headers, config.redactHeaderNames)
-        val requestBodyText = request.body?.let { RequestBodySampler.sample(it, config.maxContentLength) }
-        val pending = HttpTransactionEntity(
+        val requestBody = request.body?.let {
+            RequestBodySampler.sample(it, config.maxContentLength, request.header("Content-Encoding"))
+        }
+        val pending = transactionEntity(
             id = 0,
-            method = request.method,
-            url = request.url.toString(),
-            protocol = null,
+            request = request,
             requestHeadersText = HeadersTextCodec.encode(redactedRequestHeaders),
+            requestBody = requestBody,
             responseHeadersText = null,
-            requestBody = requestBodyText,
             responseBody = null,
+            protocol = null,
             statusCode = null,
             startedAtMillis = startedAt,
             tookMs = null,
@@ -63,18 +68,17 @@ internal class PeektInterceptor(
             if (id != null) {
                 val tookMs = System.currentTimeMillis() - startedAt
                 val redactedResponseHeaders = HeaderRedactor.redact(response.headers, config.redactHeaderNames)
-                val responseBodyText = response.peekBody(config.maxContentLength).string()
+                val responseBody = ResponseBodySampler.sample(response, config.maxContentLength)
                 persist {
                     dao.update(
-                        HttpTransactionEntity(
+                        transactionEntity(
                             id = id,
-                            method = request.method,
-                            url = request.url.toString(),
-                            protocol = response.protocol.toString(),
+                            request = request,
                             requestHeadersText = HeadersTextCodec.encode(redactedRequestHeaders),
+                            requestBody = requestBody,
                             responseHeadersText = HeadersTextCodec.encode(redactedResponseHeaders),
-                            requestBody = requestBodyText,
-                            responseBody = responseBodyText,
+                            responseBody = responseBody,
+                            protocol = response.protocol.toString(),
                             statusCode = response.code,
                             startedAtMillis = startedAt,
                             tookMs = tookMs,
@@ -89,15 +93,14 @@ internal class PeektInterceptor(
                 val tookMs = System.currentTimeMillis() - startedAt
                 persist {
                     dao.update(
-                        HttpTransactionEntity(
+                        transactionEntity(
                             id = id,
-                            method = request.method,
-                            url = request.url.toString(),
-                            protocol = null,
+                            request = request,
                             requestHeadersText = HeadersTextCodec.encode(redactedRequestHeaders),
+                            requestBody = requestBody,
                             responseHeadersText = null,
-                            requestBody = requestBodyText,
                             responseBody = null,
+                            protocol = null,
                             statusCode = null,
                             startedAtMillis = startedAt,
                             tookMs = tookMs,
@@ -108,6 +111,43 @@ internal class PeektInterceptor(
             }
             throw e
         }
+    }
+
+    private fun transactionEntity(
+        id: Long,
+        request: Request,
+        requestHeadersText: String,
+        requestBody: HttpBody?,
+        responseHeadersText: String?,
+        responseBody: HttpBody?,
+        protocol: String?,
+        statusCode: Int?,
+        startedAtMillis: Long,
+        tookMs: Long?,
+        error: String?,
+    ): HttpTransactionEntity {
+        return HttpTransactionEntity(
+            id = id,
+            method = request.method,
+            url = request.url.toString(),
+            protocol = protocol,
+            requestHeadersText = requestHeadersText,
+            responseHeadersText = responseHeadersText,
+            requestBody = HttpBodyCodec.text(requestBody),
+            requestBodyBytes = HttpBodyCodec.bytes(requestBody),
+            requestContentType = HttpBodyCodec.contentType(requestBody),
+            requestBodySize = HttpBodyCodec.size(requestBody),
+            requestBodyKind = HttpBodyCodec.kind(requestBody),
+            responseBody = HttpBodyCodec.text(responseBody),
+            responseBodyBytes = HttpBodyCodec.bytes(responseBody),
+            responseContentType = HttpBodyCodec.contentType(responseBody),
+            responseBodySize = HttpBodyCodec.size(responseBody),
+            responseBodyKind = HttpBodyCodec.kind(responseBody),
+            statusCode = statusCode,
+            startedAtMillis = startedAtMillis,
+            tookMs = tookMs,
+            error = error,
+        )
     }
 
     /**

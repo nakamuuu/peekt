@@ -5,6 +5,7 @@ import net.divlight.peekt.core.HttpTransactionId
 import net.divlight.peekt.core.HttpTransactionMessage
 import net.divlight.peekt.datastore.HttpTransactionEntity
 import net.divlight.peekt.http.HeadersTextCodec
+import net.divlight.peekt.http.HttpBodyCodec
 
 /**
  * Maps [HttpTransactionEntity] rows to core API types, including header text decoding.
@@ -34,8 +35,20 @@ internal object TransactionEntityMapper {
             transaction = toHttpTransaction(entity),
             requestHeaders = HeadersTextCodec.decode(entity.requestHeadersText),
             responseHeaders = entity.responseHeadersText?.let { HeadersTextCodec.decode(it) }.orEmpty(),
-            requestBody = entity.requestBody,
-            responseBody = entity.responseBody,
+            requestBody = HttpBodyCodec.decode(
+                kind = entity.requestBodyKind,
+                text = entity.requestBody,
+                bytes = entity.requestBodyBytes,
+                contentType = entity.requestContentType,
+                size = entity.requestBodySize,
+            ),
+            responseBody = HttpBodyCodec.decode(
+                kind = entity.responseBodyKind,
+                text = entity.responseBody,
+                bytes = entity.responseBodyBytes,
+                contentType = entity.responseContentType,
+                size = entity.responseBodySize,
+            ),
         )
     }
 }
