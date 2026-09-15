@@ -24,7 +24,7 @@ Create commits only when the user asks. Match this repository's history: small, 
 
 ## Messages
 
-- English. Imperative mood. Sentence case. End the subject with a period.
+- English. Imperative mood. Sentence case. Do not end the subject with a period.
 - No Conventional Commits prefixes (`feat:`, `fix:`, `chore:`) and no ticket IDs in the subject.
 - Subject: why or the user-visible outcome, not a file list.
 - Body: optional; one or two sentences of motivation when the subject is not enough.
@@ -35,9 +35,9 @@ fix: update Dao
 Update HttpTransactionDao.kt and RealPeektRecorder.kt
 
 # ✅ GOOD
-Avoid loading bodies when observing the transaction list.
+Avoid loading bodies when observing the transaction list
 
 # ✅ GOOD (subject + why)
-Sample request bodies as HttpBody instead of nullable text.
+Sample request bodies as HttpBody instead of nullable text
 Binary and one-shot bodies were indistinguishable from "no body" when the sampler only returned a string.
 ```
