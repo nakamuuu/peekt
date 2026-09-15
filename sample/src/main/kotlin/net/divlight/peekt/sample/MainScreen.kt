@@ -42,12 +42,16 @@ import net.divlight.peekt.core.HttpTransactionId
 import net.divlight.peekt.sample.MainUiState.RequestKind
 
 @Composable
-fun MainScreen(viewModel: MainViewModel) {
+fun MainScreen(
+    viewModel: MainViewModel,
+    onClickTransaction: (HttpTransactionId) -> Unit,
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     MainContent(
         uiState = uiState,
         onClickGetButton = viewModel::runGetRequest,
         onClickPostButton = viewModel::runPostRequest,
+        onClickTransaction = onClickTransaction,
     )
 }
 
@@ -57,6 +61,7 @@ fun MainContent(
     uiState: MainUiState,
     onClickGetButton: () -> Unit,
     onClickPostButton: () -> Unit,
+    onClickTransaction: (HttpTransactionId) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -124,7 +129,10 @@ fun MainContent(
                     items = uiState.transactions,
                     key = { it.id.value },
                 ) { tx ->
-                    MainTransactionCard(tx)
+                    MainTransactionCard(
+                        transaction = tx,
+                        onClick = { onClickTransaction(tx.id) },
+                    )
                 }
             }
             item {
@@ -188,8 +196,12 @@ private fun MainRequestButton(
 }
 
 @Composable
-private fun MainTransactionCard(transaction: HttpTransaction) {
+private fun MainTransactionCard(
+    transaction: HttpTransaction,
+    onClick: () -> Unit,
+) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -257,7 +269,7 @@ private class MainUiStatePreviewParameterProvider : PreviewParameterProvider<Mai
 
 @Preview(showBackground = true)
 @Composable
-private fun MainContentPreview(
+private fun Preview(
     @PreviewParameter(MainUiStatePreviewParameterProvider::class) uiState: MainUiState,
 ) {
     PeektTheme {
@@ -265,6 +277,7 @@ private fun MainContentPreview(
             uiState = uiState,
             onClickGetButton = {},
             onClickPostButton = {},
+            onClickTransaction = {},
         )
     }
 }

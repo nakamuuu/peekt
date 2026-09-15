@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             PeektTheme {
-                MainScreen(viewModel = viewModel)
+                SampleNavDisplay(peekt = peekt, mainViewModel = viewModel)
             }
         }
     }
