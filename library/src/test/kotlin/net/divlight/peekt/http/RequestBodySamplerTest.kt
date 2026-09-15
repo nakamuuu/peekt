@@ -1,6 +1,7 @@
 package net.divlight.peekt.http
 
 import com.google.common.truth.Truth.assertThat
+import net.divlight.peekt.core.HttpBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -10,14 +11,21 @@ import org.junit.Test
 class RequestBodySamplerTest {
     @Test
     fun sample_returnsFullTextWhenWithinLimit() {
-        val body = """{"id":1}""".toRequestBody("application/json".toMediaType())
-        assertThat(RequestBodySampler.sample(body, 500)).isEqualTo("""{"id":1}""")
+        val payload = """{"id":1}"""
+        val body = payload.toRequestBody("application/json".toMediaType())
+        val sampled = RequestBodySampler.sample(body, 500)
+        assertThat(sampled).isInstanceOf(HttpBody.Text::class.java)
+        sampled as HttpBody.Text
+        assertThat(sampled.text).isEqualTo(payload)
+        assertThat(sampled.contentType).contains("json")
+        assertThat(sampled.size).isEqualTo(body.contentLength())
     }
 
     @Test
     fun sample_truncatesToMaxContentLength() {
         val body = "a".repeat(10_000).toRequestBody("text/plain".toMediaType())
-        assertThat(RequestBodySampler.sample(body, 50)).isEqualTo("a".repeat(50) + "\n…")
+        val sampled = RequestBodySampler.sample(body, 50) as HttpBody.Text
+        assertThat(sampled.text).isEqualTo("a".repeat(50) + "\n…")
     }
 
     @Test
@@ -26,16 +34,65 @@ class RequestBodySamplerTest {
             """{"ok":true}""".toRequestBody("application/json".toMediaType()),
             oneShot = true,
         )
-        assertThat(RequestBodySampler.sample(counting, 500)).isNull()
+        val sampled = RequestBodySampler.sample(counting, 500)
+        assertThat(sampled).isInstanceOf(HttpBody.Skipped::class.java)
         assertThat(counting.writeToCount).isEqualTo(0)
     }
 
     @Test
-    fun sample_skipsBinaryContentType() {
+    fun sample_keepsSmallImageBytes() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+        val counting = CountingRequestBody(jpeg.toRequestBody("image/jpeg".toMediaType()))
+        val sampled = RequestBodySampler.sample(counting, 500)
+        assertThat(sampled).isInstanceOf(HttpBody.Binary::class.java)
+        sampled as HttpBody.Binary
+        assertThat(sampled.isOmitted).isFalse()
+        assertThat(sampled.bytes).isEqualTo(jpeg)
+        assertThat(sampled.contentType).isEqualTo("image/jpeg")
+        assertThat(counting.writeToCount).isEqualTo(1)
+    }
+
+    @Test
+    fun sample_omitsOversizedImageWithoutReading() {
         val counting = CountingRequestBody(
             ByteArray(1024).toRequestBody("image/jpeg".toMediaType()),
         )
-        assertThat(RequestBodySampler.sample(counting, 500)).isNull()
+        val sampled = RequestBodySampler.sample(counting, 500)
+        assertThat(sampled).isInstanceOf(HttpBody.Binary::class.java)
+        sampled as HttpBody.Binary
+        assertThat(sampled.isOmitted).isTrue()
+        assertThat(sampled.size).isEqualTo(1024)
+        assertThat(counting.writeToCount).isEqualTo(0)
+    }
+
+    @Test
+    fun sample_omitsProtobufWithoutReading() {
+        val counting = CountingRequestBody(
+            ByteArray(32).toRequestBody("application/x-protobuf".toMediaType()),
+        )
+        val sampled = RequestBodySampler.sample(counting, 500)
+        assertThat(sampled).isInstanceOf(HttpBody.Binary::class.java)
+        assertThat((sampled as HttpBody.Binary).isOmitted).isTrue()
+        assertThat(counting.writeToCount).isEqualTo(0)
+    }
+
+    @Test
+    fun sample_omitsGzipContentTypeWithoutReading() {
+        val counting = CountingRequestBody(
+            ByteArray(32).toRequestBody("application/gzip".toMediaType()),
+        )
+        val sampled = RequestBodySampler.sample(counting, 500)
+        assertThat((sampled as HttpBody.Binary).isOmitted).isTrue()
+        assertThat(counting.writeToCount).isEqualTo(0)
+    }
+
+    @Test
+    fun sample_omitsCompressedEncodingWithoutReading() {
+        val counting = CountingRequestBody(
+            """{"ok":true}""".toRequestBody("application/json".toMediaType()),
+        )
+        val sampled = RequestBodySampler.sample(counting, 500, contentEncoding = "gzip")
+        assertThat((sampled as HttpBody.Binary).isOmitted).isTrue()
         assertThat(counting.writeToCount).isEqualTo(0)
     }
 
