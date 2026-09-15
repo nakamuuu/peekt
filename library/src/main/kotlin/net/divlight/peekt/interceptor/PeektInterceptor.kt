@@ -20,10 +20,11 @@ import okhttp3.Response
 /**
  * OkHttp [Interceptor] that persists one row per request: insert before the network call, update on success or failure.
  *
- * Request and response bodies are classified as [HttpBody] up to [PeektConfig.maxContentLength]. The original
- * request body is forwarded to the chain. Database work runs on [Dispatchers.IO] inside [runBlocking] because
- * OkHttp interceptors are synchronous. Persistence failures are swallowed so they never replace the chain result
- * or the original network exception.
+ * Request and response bodies are classified as [HttpBody] up to [PeektConfig.maxContentLength]. When the
+ * request body is read for sampling, a replayable copy is forwarded so a custom body that can be written
+ * only once is not consumed before [Interceptor.Chain.proceed]. Database work runs on [Dispatchers.IO]
+ * inside [runBlocking] because OkHttp interceptors are synchronous. Persistence failures are swallowed so
+ * they never replace the chain result or the original network exception.
  */
 internal class PeektInterceptor(
     private val dao: HttpTransactionDao,
@@ -39,8 +40,13 @@ internal class PeektInterceptor(
 
         val startedAt = System.currentTimeMillis()
         val redactedRequestHeaders = HeaderRedactor.redact(request.headers, config.redactHeaderNames)
-        val requestBody = request.body?.let {
-            RequestBodySampler.sample(it, config.maxContentLength, request.header("Content-Encoding"))
+        val preparedBody = request.body?.let {
+            RequestBodySampler.prepare(it, config.maxContentLength, request.header("Content-Encoding"))
+        }
+        val requestBody = preparedBody?.sampled
+        val requestToProceed = when {
+            preparedBody == null || preparedBody.outgoing === request.body -> request
+            else -> request.newBuilder().method(request.method, preparedBody.outgoing).build()
         }
         val pending = transactionEntity(
             id = 0,
@@ -64,7 +70,7 @@ internal class PeektInterceptor(
             insertedId
         }
         return try {
-            val response = chain.proceed(request)
+            val response = chain.proceed(requestToProceed)
             if (id != null) {
                 val tookMs = System.currentTimeMillis() - startedAt
                 val redactedResponseHeaders = HeaderRedactor.redact(response.headers, config.redactHeaderNames)

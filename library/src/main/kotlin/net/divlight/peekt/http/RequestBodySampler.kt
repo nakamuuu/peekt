@@ -3,84 +3,112 @@ package net.divlight.peekt.http
 import net.divlight.peekt.core.HttpBody
 import okhttp3.RequestBody
 import okio.Buffer
+import okio.BufferedSink
 import okio.ByteString
-import okio.Sink
-import okio.Timeout
-import okio.buffer
 import kotlin.coroutines.cancellation.CancellationException
+
+/**
+ * Sampled request body plus the [RequestBody] that should be sent on the chain.
+ *
+ * [outgoing] is a replayable copy when the original was read for sampling, so a custom body that can
+ * be written only once is not consumed before [okhttp3.Interceptor.Chain.proceed].
+ */
+internal data class PreparedRequestBody(
+    val sampled: HttpBody,
+    val outgoing: RequestBody,
+)
 
 /**
  * Samples an OkHttp [RequestBody] as [HttpBody] without retaining more than the configured byte limit.
  *
  * [RequestBody.isOneShot] and [RequestBody.isDuplex] bodies become [HttpBody.Skipped] so they can still be written
  * once by the chain. Image payloads that fit are stored as bytes; other binaries keep metadata only.
+ * When the original body is read, [prepare] replaces it with a replayable copy for the network call.
  */
 internal object RequestBodySampler {
     /**
      * Classifies and optionally reads [body]. [contentEncoding] omits compressed payloads so they are not decoded as text.
      */
     fun sample(body: RequestBody, maxContentLength: Long, contentEncoding: String? = null): HttpBody {
-        val contentType = body.contentType()?.toString()
+        return prepare(body, maxContentLength, contentEncoding).sampled
+    }
+
+    /**
+     * Samples [body] and returns the [RequestBody] to forward to the chain.
+     */
+    fun prepare(
+        body: RequestBody,
+        maxContentLength: Long,
+        contentEncoding: String? = null,
+    ): PreparedRequestBody {
+        val mediaType = body.contentType()
+        val contentType = mediaType?.toString()
         val size = body.contentLength().takeIf { it >= 0L }
         if (body.isDuplex() || body.isOneShot()) {
-            return HttpBody.Skipped(contentType, size)
+            return PreparedRequestBody(HttpBody.Skipped(contentType, size), body)
         }
         if (MediaTypes.isCompressedEncoding(contentEncoding)) {
-            return HttpBody.Binary(contentType, size, bytes = null)
+            return PreparedRequestBody(HttpBody.Binary(contentType, size, bytes = null), body)
         }
-        if (MediaTypes.isImage(body.contentType())) {
-            return sampleImage(body, contentType, size, maxContentLength)
+        if (MediaTypes.isImage(mediaType)) {
+            return prepareImage(body, contentType, size, maxContentLength)
         }
-        if (!MediaTypes.isTextual(body.contentType())) {
-            return HttpBody.Binary(contentType, size, bytes = null)
+        if (!MediaTypes.isTextual(mediaType)) {
+            return PreparedRequestBody(HttpBody.Binary(contentType, size, bytes = null), body)
         }
         if (maxContentLength <= 0L) {
             val text = if (body.contentLength() == 0L) "" else "\n…"
-            return HttpBody.Text(contentType, size, text)
+            return PreparedRequestBody(HttpBody.Text(contentType, size, text), body)
         }
-        return try {
-            HttpBody.Text(contentType, size, readLimitedUtf8(body, maxContentLength))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            HttpBody.Binary(contentType, size, bytes = null)
+        return readReplayable(body, contentType, size) { bytes ->
+            HttpBody.Text(contentType, size, utf8Sample(bytes, maxContentLength))
         }
     }
 
-    private fun sampleImage(
+    private fun prepareImage(
         body: RequestBody,
         contentType: String?,
         size: Long?,
         maxContentLength: Long,
-    ): HttpBody.Binary {
+    ): PreparedRequestBody {
         if (maxContentLength <= 0L) {
             val bytes = if (body.contentLength() == 0L) ByteArray(0) else null
-            return HttpBody.Binary(contentType, size, bytes)
+            return PreparedRequestBody(HttpBody.Binary(contentType, size, bytes), body)
         }
         if (size != null && size > maxContentLength) {
-            return HttpBody.Binary(contentType, size, bytes = null)
+            return PreparedRequestBody(HttpBody.Binary(contentType, size, bytes = null), body)
         }
+        return readReplayable(body, contentType, size) { bytes ->
+            if (bytes.size.toLong() > maxContentLength) {
+                HttpBody.Binary(contentType, size, bytes = null)
+            } else {
+                HttpBody.Binary(contentType, size, bytes.toByteArray())
+            }
+        }
+    }
+
+    private fun readReplayable(
+        body: RequestBody,
+        contentType: String?,
+        size: Long?,
+        sample: (ByteString) -> HttpBody,
+    ): PreparedRequestBody {
         return try {
-            HttpBody.Binary(contentType, size, readLimitedBytes(body, maxContentLength))
+            val buffer = Buffer()
+            body.writeTo(buffer)
+            val captured = buffer.readByteString()
+            PreparedRequestBody(sample(captured), ReplayableRequestBody(body, captured))
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            HttpBody.Binary(contentType, size, bytes = null)
+            PreparedRequestBody(HttpBody.Binary(contentType, size, bytes = null), body)
         }
     }
 
-    private fun readLimitedBytes(body: RequestBody, maxContentLength: Long): ByteArray? {
-        val preview = LimitedPreview(maxContentLength)
-        preview.sink.buffer().use { body.writeTo(it) }
-        return preview.bytesOrNull()
-    }
-
-    private fun readLimitedUtf8(body: RequestBody, maxContentLength: Long): String {
-        val preview = LimitedPreview(maxContentLength)
-        preview.sink.buffer().use { body.writeTo(it) }
-        val captured = preview.buffer.readByteString()
-        if (!preview.truncated) return captured.utf8()
-        return dropIncompleteUtf8(captured).utf8() + "\n…"
+    private fun utf8Sample(bytes: ByteString, maxContentLength: Long): String {
+        val take = minOf(bytes.size.toLong(), maxContentLength.coerceAtLeast(0L)).toInt()
+        if (take == bytes.size) return bytes.utf8()
+        return dropIncompleteUtf8(bytes.substring(0, take)).utf8() + "\n…"
     }
 
     /**
@@ -109,35 +137,16 @@ internal object RequestBodySampler {
         return if (end == bytes.size) bytes else bytes.substring(0, end)
     }
 
-    private class LimitedPreview(maxContentLength: Long) {
-        val buffer = Buffer()
-        var remaining = maxContentLength
-        var truncated = false
-        val sink = object : Sink {
-            override fun write(source: Buffer, byteCount: Long) {
-                if (remaining > 0L) {
-                    val take = minOf(byteCount, remaining)
-                    buffer.write(source, take)
-                    remaining -= take
-                    if (byteCount > take) {
-                        truncated = true
-                        source.skip(byteCount - take)
-                    }
-                } else {
-                    truncated = true
-                    source.skip(byteCount)
-                }
-            }
+    private class ReplayableRequestBody(
+        private val original: RequestBody,
+        private val bytes: ByteString,
+    ) : RequestBody() {
+        override fun contentType() = original.contentType()
 
-            override fun flush() = Unit
+        override fun contentLength() = bytes.size.toLong()
 
-            override fun timeout() = Timeout.NONE
-
-            override fun close() = Unit
-        }
-
-        fun bytesOrNull(): ByteArray? {
-            return if (truncated) null else buffer.readByteArray()
+        override fun writeTo(sink: BufferedSink) {
+            sink.write(bytes)
         }
     }
 }

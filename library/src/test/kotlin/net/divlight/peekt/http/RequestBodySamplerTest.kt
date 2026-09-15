@@ -5,6 +5,7 @@ import net.divlight.peekt.core.HttpBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Buffer
 import okio.BufferedSink
 import org.junit.Test
 
@@ -26,6 +27,18 @@ class RequestBodySamplerTest {
         val body = "a".repeat(10_000).toRequestBody("text/plain".toMediaType())
         val sampled = RequestBodySampler.sample(body, 50) as HttpBody.Text
         assertThat(sampled.text).isEqualTo("a".repeat(50) + "\n…")
+    }
+
+    @Test
+    fun prepare_replaysBodyThatCanBeWrittenOnlyOnce() {
+        val payload = """{"title":"foo"}"""
+        val consuming = ConsumingRequestBody(payload)
+        val prepared = RequestBodySampler.prepare(consuming, 500)
+        assertThat(prepared.sampled).isInstanceOf(HttpBody.Text::class.java)
+        assertThat((prepared.sampled as HttpBody.Text).text).isEqualTo(payload)
+        val replay = Buffer()
+        prepared.outgoing.writeTo(replay)
+        assertThat(replay.readUtf8()).isEqualTo(payload)
     }
 
     @Test
@@ -112,6 +125,23 @@ class RequestBodySamplerTest {
         override fun writeTo(sink: BufferedSink) {
             writeToCount++
             delegate.writeTo(sink)
+        }
+    }
+
+    private class ConsumingRequestBody(
+        payload: String,
+    ) : RequestBody() {
+        private val bytes = payload.encodeToByteArray()
+        private var consumed = false
+
+        override fun contentType() = "application/json".toMediaType()
+
+        override fun contentLength() = bytes.size.toLong()
+
+        override fun writeTo(sink: BufferedSink) {
+            check(!consumed) { "already consumed" }
+            consumed = true
+            sink.write(bytes)
         }
     }
 }

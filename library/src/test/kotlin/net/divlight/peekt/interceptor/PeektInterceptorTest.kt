@@ -14,7 +14,9 @@ import net.divlight.peekt.datastore.PeektDatabase
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -165,6 +167,29 @@ class PeektInterceptorTest {
         val request = Request.Builder()
             .url(server.url("/posts"))
             .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).execute().use { response ->
+            assertThat(response.code).isEqualTo(200)
+        }
+        assertThat(server.takeRequest().body.readUtf8()).isEqualTo(payload)
+        val row = runBlocking { dao.observeAll().first() }.single()
+        assertThat(row.requestBody).isEqualTo(payload)
+        assertThat(row.requestBodyKind).isEqualTo("text")
+    }
+
+    @Test
+    fun intercept_forwardsConsumingCustomRequestBody() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        val payload = """{"title":"foo"}"""
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        val request = Request.Builder()
+            .url(server.url("/posts"))
+            .post(ConsumingRequestBody(payload))
             .build()
         client.newCall(request).execute().use { response ->
             assertThat(response.code).isEqualTo(200)
@@ -339,4 +364,21 @@ private class FailingHttpTransactionDao(
     override suspend fun deleteStartedBefore(beforeMillis: Long) = delegate.deleteStartedBefore(beforeMillis)
 
     override suspend fun deleteAllExceptLatest(keep: Int) = delegate.deleteAllExceptLatest(keep)
+}
+
+private class ConsumingRequestBody(
+    payload: String,
+) : RequestBody() {
+    private val bytes = payload.encodeToByteArray()
+    private var consumed = false
+
+    override fun contentType() = "application/json".toMediaType()
+
+    override fun contentLength() = bytes.size.toLong()
+
+    override fun writeTo(sink: BufferedSink) {
+        check(!consumed) { "already consumed" }
+        consumed = true
+        sink.write(bytes)
+    }
 }
