@@ -171,6 +171,71 @@ class PeektInterceptorTest {
         assertThat(server.takeRequest().body.readUtf8()).isEqualTo(payload)
         val row = runBlocking { dao.observeAll().first() }.single()
         assertThat(row.requestBody).isEqualTo(payload)
+        assertThat(row.requestBodyKind).isEqualTo("text")
+    }
+
+    @Test
+    fun intercept_recordsImageResponseBytes() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "image/jpeg")
+                .setBody(okio.Buffer().write(jpeg)),
+        )
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        client.newCall(Request.Builder().url(server.url("/photo")).get().build()).execute().close()
+        val row = runBlocking { dao.observeAll().first() }.single()
+        assertThat(row.responseBodyKind).isEqualTo("binary")
+        assertThat(row.responseBody).isNull()
+        assertThat(row.responseBodyBytes).isEqualTo(jpeg)
+        assertThat(row.responseContentType).contains("image/jpeg")
+        assertThat(row.responseBodySize).isEqualTo(jpeg.size.toLong())
+    }
+
+    @Test
+    fun intercept_omitsOversizedImageResponse() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig(maxContentLength = 50))
+        val jpeg = ByteArray(200) { 1 }
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "image/jpeg")
+                .setBody(okio.Buffer().write(jpeg)),
+        )
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        client.newCall(Request.Builder().url(server.url("/photo")).get().build()).execute().close()
+        val row = runBlocking { dao.observeAll().first() }.single()
+        assertThat(row.responseBodyKind).isEqualTo("binary")
+        assertThat(row.responseBodyBytes).isNull()
+        assertThat(row.responseBodySize).isEqualTo(jpeg.size.toLong())
+    }
+
+    @Test
+    fun intercept_omitsProtobufResponse() {
+        val db = PeektDatabase.createInMemory(context)
+        val dao = db.httpTransactionDao()
+        val interceptor = PeektInterceptor(dao, PeektConfig())
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "application/x-protobuf")
+                .setBody("wire"),
+        )
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .build()
+        client.newCall(Request.Builder().url(server.url("/rpc")).get().build()).execute().close()
+        val row = runBlocking { dao.observeAll().first() }.single()
+        assertThat(row.responseBodyKind).isEqualTo("binary")
+        assertThat(row.responseBody).isNull()
+        assertThat(row.responseBodyBytes).isNull()
     }
 
     @Test
