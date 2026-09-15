@@ -1,6 +1,8 @@
 package net.divlight.peekt
 
 import android.content.Context
+import android.os.Process
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,12 +42,23 @@ class Peekt private constructor(
         fun create(context: Context, config: PeektConfig = PeektConfig()): Peekt {
             val dao = PeektDatabase.create(context).httpTransactionDao()
             when (config.clearingStrategy) {
-                ClearingStrategy.OnLaunch -> ioScope.launch { dao.deleteAll() }
+                ClearingStrategy.OnLaunch -> {
+                    val cutoffMillis = processStartEpochMillis()
+                    ioScope.launch { dao.deleteStartedBefore(cutoffMillis) }
+                }
                 ClearingStrategy.Never -> Unit
             }
             val recorder = RealPeektRecorder(dao)
             val interceptor = PeektInterceptor(dao, config)
             return Peekt(recorder, interceptor)
+        }
+
+        /**
+         * Wall-clock millis corresponding to when this process started.
+         */
+        private fun processStartEpochMillis(): Long {
+            val elapsedSinceStart = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime()
+            return System.currentTimeMillis() - elapsedSinceStart
         }
     }
 }

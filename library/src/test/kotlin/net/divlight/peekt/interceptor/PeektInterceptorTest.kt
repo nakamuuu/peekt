@@ -336,5 +336,7 @@ private class FailingHttpTransactionDao(
 
     override suspend fun deleteAll() = delegate.deleteAll()
 
+    override suspend fun deleteStartedBefore(beforeMillis: Long) = delegate.deleteStartedBefore(beforeMillis)
+
     override suspend fun deleteAllExceptLatest(keep: Int) = delegate.deleteAllExceptLatest(keep)
 }

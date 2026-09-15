@@ -5,7 +5,10 @@ package net.divlight.peekt.core
  */
 enum class ClearingStrategy {
     /**
-     * Deletes every stored transaction when Peekt is created.
+     * Deletes stored transactions that started before this process, when Peekt is created.
+     *
+     * Rows recorded in the current process are kept, so creation cannot race with the first
+     * intercepted request.
      */
     OnLaunch,
 

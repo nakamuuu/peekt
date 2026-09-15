@@ -59,6 +59,12 @@ interface HttpTransactionDao {
     suspend fun deleteAll()
 
     /**
+     * Deletes rows whose [HttpTransactionEntity.startedAtMillis] is strictly before [beforeMillis].
+     */
+    @Query("DELETE FROM http_transactions WHERE started_at_millis < :beforeMillis")
+    suspend fun deleteStartedBefore(beforeMillis: Long)
+
+    /**
      * Deletes all rows except the [keep] newest, by [HttpTransactionEntity.startedAtMillis] then id.
      */
     @Query(

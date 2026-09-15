@@ -87,7 +87,7 @@ See KDoc on `Peekt`, `PeektRecorder`, and `PeektConfig` for full API details.
 | Property | Description |
 | -------- | ----------- |
 | `maxTransactions` | Maximum stored transactions to keep after each insert, newest first (default `100`). `null` disables the cap. |
-| `clearingStrategy` | `Never` (default) keeps recordings across launches. `OnLaunch` deletes them in `Peekt.create`. |
+| `clearingStrategy` | `Never` (default) keeps recordings across launches. `OnLaunch` deletes rows from previous processes in `Peekt.create`, and keeps transactions started in this process. |
 | `includedHosts` | Hosts to record (compared case-insensitively). A request is recorded when its host equals an entry or is a subdomain of one. A leading `.` on an entry is ignored. Empty records every host. |
 | `maxContentLength` | Maximum bytes kept per textual body and the cap for stored `image/*` bytes (default `500_000`). Longer text is truncated with an ellipsis. Other binaries, and images over the cap, keep content type and size only. |
 | `redactHeaderNames` | Header names (compared case-insensitively) whose values are replaced with `**` before persistence. Empty by default. |

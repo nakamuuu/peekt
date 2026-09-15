@@ -10,6 +10,10 @@ import net.divlight.peekt.core.ClearingStrategy
 import net.divlight.peekt.core.PeektConfig
 import net.divlight.peekt.datastore.HttpTransactionEntity
 import net.divlight.peekt.datastore.PeektDatabase
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -34,7 +38,7 @@ class PeektTest {
 
     @Test
     fun create_clearsStoreOnLaunch() {
-        seedTransaction()
+        seedTransaction(startedAtMillis = 1L, url = PREVIOUS_PROCESS_URL)
         val peekt = Peekt.create(
             context,
             PeektConfig(clearingStrategy = ClearingStrategy.OnLaunch),
@@ -48,6 +52,55 @@ class PeektTest {
     }
 
     @Test
+    fun create_onLaunchKeepsRowsStartedAfterProcessStart() {
+        seedTransaction(startedAtMillis = 1L, url = PREVIOUS_PROCESS_URL)
+        seedTransaction(startedAtMillis = System.currentTimeMillis(), url = THIS_PROCESS_URL)
+        val peekt = Peekt.create(
+            context,
+            PeektConfig(clearingStrategy = ClearingStrategy.OnLaunch),
+        )
+        val rows = runBlocking {
+            withTimeout(5_000) {
+                peekt.recorder.observeTransactions().first { list ->
+                    list.none { it.url == PREVIOUS_PROCESS_URL } &&
+                        list.any { it.url == THIS_PROCESS_URL }
+                }
+            }
+        }
+        assertThat(rows.map { it.url }).containsExactly(THIS_PROCESS_URL)
+    }
+
+    @Test
+    fun create_onLaunchDoesNotDeleteRequestRecordedAfterCreate() {
+        seedTransaction(startedAtMillis = 1L, url = PREVIOUS_PROCESS_URL)
+        val peekt = Peekt.create(
+            context,
+            PeektConfig(clearingStrategy = ClearingStrategy.OnLaunch),
+        )
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(MockResponse().setBody("ok"))
+            val client = OkHttpClient.Builder()
+                .addInterceptor(peekt.interceptor())
+                .build()
+            val requestUrl = server.url("/after-create").toString()
+            client.newCall(Request.Builder().url(requestUrl).get().build()).execute().close()
+            val rows = runBlocking {
+                withTimeout(5_000) {
+                    peekt.recorder.observeTransactions().first { list ->
+                        list.none { it.url == PREVIOUS_PROCESS_URL } &&
+                            list.any { it.url == requestUrl }
+                    }
+                }
+            }
+            assertThat(rows.map { it.url }).containsExactly(requestUrl)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun create_keepsStoreWhenClearingNever() {
         seedTransaction()
         val peekt = Peekt.create(
@@ -58,26 +111,34 @@ class PeektTest {
         assertThat(rows).hasSize(1)
     }
 
-    private fun seedTransaction() {
+    private fun seedTransaction(
+        startedAtMillis: Long = 1L,
+        url: String = PREVIOUS_PROCESS_URL,
+    ) {
         val db = PeektDatabase.create(context)
         runBlocking {
             db.httpTransactionDao().insert(
                 HttpTransactionEntity(
                     id = 0,
                     method = "GET",
-                    url = "https://example.com/",
+                    url = url,
                     protocol = null,
                     requestHeadersText = "",
                     responseHeadersText = null,
                     requestBody = null,
                     responseBody = null,
                     statusCode = 200,
-                    startedAtMillis = 1L,
+                    startedAtMillis = startedAtMillis,
                     tookMs = 1L,
                     error = null,
                 ),
             )
         }
         db.close()
+    }
+
+    private companion object {
+        const val PREVIOUS_PROCESS_URL = "https://example.com/previous"
+        const val THIS_PROCESS_URL = "https://example.com/current"
     }
 }
