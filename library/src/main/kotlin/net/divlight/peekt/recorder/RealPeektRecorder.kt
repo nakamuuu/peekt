@@ -17,8 +17,8 @@ internal class RealPeektRecorder(
     private val dao: HttpTransactionDao,
 ) : PeektRecorder {
     override fun observeTransactions(): Flow<List<HttpTransaction>> {
-        return dao.observeAll().map { entities ->
-            entities.map { TransactionEntityMapper.toHttpTransaction(it) }
+        return dao.observeSummaries().map { summaries ->
+            summaries.map { TransactionEntityMapper.toHttpTransaction(it) }
         }
     }
 

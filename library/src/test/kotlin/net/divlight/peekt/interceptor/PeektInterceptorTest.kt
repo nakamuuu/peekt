@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import net.divlight.peekt.core.PeektConfig
 import net.divlight.peekt.datastore.HttpTransactionDao
 import net.divlight.peekt.datastore.HttpTransactionEntity
+import net.divlight.peekt.datastore.HttpTransactionSummary
 import net.divlight.peekt.datastore.PeektDatabase
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -326,6 +327,8 @@ private class FailingHttpTransactionDao(
         updateException?.let { throw it }
         delegate.update(entity)
     }
+
+    override fun observeSummaries(): Flow<List<HttpTransactionSummary>> = delegate.observeSummaries()
 
     override fun observeAll(): Flow<List<HttpTransactionEntity>> = delegate.observeAll()
 

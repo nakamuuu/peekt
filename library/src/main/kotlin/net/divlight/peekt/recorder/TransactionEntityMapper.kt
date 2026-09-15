@@ -4,6 +4,7 @@ import net.divlight.peekt.core.HttpTransaction
 import net.divlight.peekt.core.HttpTransactionId
 import net.divlight.peekt.core.HttpTransactionMessage
 import net.divlight.peekt.datastore.HttpTransactionEntity
+import net.divlight.peekt.datastore.HttpTransactionSummary
 import net.divlight.peekt.http.HeadersTextCodec
 import net.divlight.peekt.http.HttpBodyCodec
 
@@ -11,6 +12,22 @@ import net.divlight.peekt.http.HttpBodyCodec
  * Maps [HttpTransactionEntity] rows to core API types, including header text decoding.
  */
 internal object TransactionEntityMapper {
+    /**
+     * Maps a list-row projection to [HttpTransaction] (no header or body payload).
+     */
+    fun toHttpTransaction(summary: HttpTransactionSummary): HttpTransaction {
+        return HttpTransaction(
+            id = HttpTransactionId(summary.id),
+            method = summary.method,
+            url = summary.url,
+            protocol = summary.protocol,
+            statusCode = summary.statusCode,
+            startedAtMillis = summary.startedAtMillis,
+            tookMs = summary.tookMs,
+            error = summary.error,
+        )
+    }
+
     /**
      * Maps a stored row to summary [HttpTransaction] fields (no header or body payload).
      */

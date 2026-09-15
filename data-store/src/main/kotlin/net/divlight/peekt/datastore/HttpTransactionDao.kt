@@ -27,6 +27,20 @@ interface HttpTransactionDao {
     suspend fun update(entity: HttpTransactionEntity)
 
     /**
+     * Observes list-row projections, newest first (by [HttpTransactionEntity.startedAtMillis] descending).
+     *
+     * Header and body columns are omitted so list UIs do not load payloads.
+     */
+    @Query(
+        """
+        SELECT id, method, url, protocol, status_code, started_at_millis, took_ms, error
+        FROM http_transactions
+        ORDER BY started_at_millis DESC
+        """,
+    )
+    fun observeSummaries(): Flow<List<HttpTransactionSummary>>
+
+    /**
      * Observes all transactions, newest first (by [HttpTransactionEntity.startedAtMillis] descending).
      */
     @Query("SELECT * FROM http_transactions ORDER BY started_at_millis DESC")
