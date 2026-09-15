@@ -8,8 +8,9 @@ package net.divlight.peekt.core
  * @property clearingStrategy When to delete every stored transaction automatically.
  * @property includedHosts Hosts to record (compared case-insensitively). A request is recorded when its host
  *   equals an entry or is a subdomain of one. A leading `.` on an entry is ignored. Empty records every host.
- * @property maxContentLength Maximum number of bytes to retain per request body, and maximum bytes
- *   read from the response via [okhttp3.Response.peekBody]. Longer content is truncated with an ellipsis suffix.
+ * @property maxContentLength Maximum number of bytes to retain per textual body, and the size cap for
+ *   stored image bytes. Longer text is truncated with an ellipsis. Images over this limit, and other
+ *   binaries, keep metadata only.
  * @property redactHeaderNames Header names (compared case-insensitively) whose values are replaced with `"**"`
  *   before persistence.
  */
